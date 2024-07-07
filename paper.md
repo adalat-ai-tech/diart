@@ -64,6 +64,8 @@ However, although "offline" systems today achieve outstanding performance
 in pre-recorded conversations, additional problems of "online" real-time
 diarization, like limited context and low latency, require flexible and
 efficient solutions enabling both research and production-ready applications.
+We introduce a Python package called `Diart` to address real-time speaker
+diarization in an efficient and flexible way.
 
 # Statement of need
 
