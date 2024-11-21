@@ -129,7 +129,11 @@ class StreamingInferenceHandler:
 
     def run(self):
         """Starts the WebSocket server."""
-        self.server.run_forever()
+        print("Starting WebSocket server...")
+        try:
+            self.server.run_forever()
+        except Exception as e:
+            print(f"Server stopped unexpectedly: {e}")
 
     def close(self, client_id: Text):
         """Closes audio stream of a specific client"""
