@@ -107,7 +107,7 @@ def run():
         batch_size=1,
         do_profile=False,
         do_plot=False,
-        show_progress=True,
+        show_progress=False,
         output=args.output,
     )
 
