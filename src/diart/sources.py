@@ -233,69 +233,6 @@ class WebSocketAudioSource(AudioSource):
         self.stream.on_completed()
 
 
-class WebSocketAudioHandler:
-    """
-    Handles a WebSocket server and manages audio streams from multiple client connections.
-    """
-
-    def __init__(
-        self,
-        sample_rate: int,
-        host: Text = "127.0.0.1",
-        port: int = 7007,
-        key: Optional[Union[Text, Path]] = None,
-        certificate: Optional[Union[Text, Path]] = None,
-    ):
-        self.server = WebsocketServer(host, port, key=key, cert=certificate)
-        self.server.set_fn_message_received(self._on_message_received)
-
-        self.clients: Dict[Text, WebSocketAudioSource] = {}
-        self.uri = f"{host}:{port}"
-        self.sample_rate = sample_rate
-
-    def _on_message_received(
-        self,
-        client: Dict[Text, Any],
-        server: WebsocketServer,
-        message: AnyStr,
-    ):
-        client_id = client["id"]
-
-        # Ensure the client has an associated WebSocketAudioSource
-        if client_id not in self.clients:
-            self.clients[client_id] = WebSocketAudioSource(
-                uri=f"{self.uri}:{client_id}",
-                sample_rate=self.sample_rate,
-            )
-
-        # Pass the message to the respective WebSocketAudioSource
-        self.clients[client_id].process_message(message)
-
-    def send(self, client_id: Text, message: AnyStr):
-        """Send a message to a specific client."""
-        client = next(
-            (c for c in self.server.clients if c["id"] == client_id), None
-        )
-        if client is not None and len(message) > 0:
-            self.server.send_message(client, message)
-
-    def run(self):
-        """Starts the WebSocket server."""
-        self.server.run_forever()
-
-    def close(self, client_id: Text):
-        """Closes audio stream of a specific client"""
-        if client_id in self.clients:
-            self.clients[client_id].close()
-
-    def close_all(self):
-        """Shuts down the server gracefully, invoking close on each audio source."""
-        if self.server is not None:
-            for client_id in self.clients.keys():
-                self.close(client_id)
-            self.server.shutdown_gracefully()
-
-
 class TorchStreamAudioSource(AudioSource):
     def __init__(
         self,
