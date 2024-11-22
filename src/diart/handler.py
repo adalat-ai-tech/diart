@@ -10,8 +10,54 @@ from .inference import StreamingInference
 from .progress import ProgressBar, RichProgressBar
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class WebSocketAudioSourceConfig:
+    """Configuration for WebSocket audio source.
+
+    Parameters
+    ----------
+    uri : str
+        WebSocket URI for the audio source
+    sample_rate : int
+        Audio sample rate in Hz
+    """
+    uri: str
+    sample_rate: int = 16000
+
+
+@dataclass
+class StreamingInferenceConfig:
+    """Configuration for streaming inference.
+
+    Parameters
+    ----------
+    pipeline : blocks.Pipeline
+        Diarization pipeline configuration
+    batch_size : int
+        Number of inputs to process at once
+    do_profile : bool
+        Enable processing time profiling
+    do_plot : bool
+        Enable real-time prediction plotting
+    show_progress : bool
+        Display progress bar
+    progress_bar : Optional[ProgressBar]
+        Custom progress bar implementation
+    """
+    pipeline: blocks.Pipeline
+    batch_size: int = 1
+    do_profile: bool = True
+    do_plot: bool = False
+    show_progress: bool = True
+    progress_bar: Optional[ProgressBar] = None
+
 
 @dataclass
 class ClientState:
@@ -28,8 +74,8 @@ class StreamingInferenceHandler:
 
     Parameters
     ----------
-    pipeline : blocks.Pipeline
-        Configured speaker diarization pipeline
+    inference_config : StreamingInferenceConfig
+        Streaming inference configuration
     sample_rate : int, optional
         Audio sample rate in Hz, by default 16000
     host : str, optional
@@ -40,46 +86,24 @@ class StreamingInferenceHandler:
         SSL key file path for secure WebSocket
     certificate : Union[str, Path], optional
         SSL certificate file path for secure WebSocket
-    batch_size : int, optional
-        Number of inputs to process at once, by default 1
-    do_profile : bool, optional
-        Enable processing time profiling, by default True
-    do_plot : bool, optional
-        Enable real-time prediction plotting, by default False
-    show_progress : bool, optional
-        Display progress bar, by default True
-    progress_bar : ProgressBar, optional
-        Custom progress bar implementation
-    output : bool, optional
-        Enable output saving, by default False
     """
 
     def __init__(
         self,
-        pipeline: blocks.Pipeline,
+        inference_config: StreamingInferenceConfig,
         sample_rate: int = 16000,
         host: Text = "127.0.0.1",
         port: int = 7007,
         key: Optional[Union[Text, Path]] = None,
         certificate: Optional[Union[Text, Path]] = None,
-        batch_size: int = 1,
-        do_profile: bool = True,
-        do_plot: bool = False,
-        show_progress: bool = True,
-        progress_bar: Optional[ProgressBar] = None,
-        output: bool = False
     ):
-        self.pipeline = pipeline
-        self.batch_size = batch_size
-        self.do_profile = do_profile
-        self.do_plot = do_plot
-        self.show_progress = show_progress
-        self.progress_bar = progress_bar or RichProgressBar()
-        self.output = output
-
+        self.inference_config = inference_config
+        self.sample_rate = sample_rate
+        self.host = host
+        self.port = port
+        
         # Server configuration
         self.uri = f"{host}:{port}"
-        self.sample_rate = sample_rate
         self._clients: Dict[Text, ClientState] = {}
 
         # Initialize WebSocket server
@@ -105,19 +129,24 @@ class StreamingInferenceHandler:
         ClientState
             Initialized client state object
         """
-        audio_source = src.WebSocketAudioSource(
+        audio_config = WebSocketAudioSourceConfig(
             uri=f"{self.uri}:{client_id}",
             sample_rate=self.sample_rate
         )
+        
+        audio_source = src.WebSocketAudioSource(
+            uri=audio_config.uri,
+            sample_rate=audio_config.sample_rate
+        )
 
         inference = StreamingInference(
-            pipeline=self.pipeline,
+            pipeline=self.inference_config.pipeline,
             source=audio_source,
-            batch_size=self.batch_size,
-            do_profile=self.do_profile,
-            do_plot=self.do_plot,
-            show_progress=self.show_progress,
-            progress_bar=self.progress_bar
+            batch_size=self.inference_config.batch_size,
+            do_profile=self.inference_config.do_profile,
+            do_plot=self.inference_config.do_plot,
+            show_progress=self.inference_config.show_progress,
+            progress_bar=self.inference_config.progress_bar
         )
 
         return ClientState(audio_source=audio_source, inference=inference)

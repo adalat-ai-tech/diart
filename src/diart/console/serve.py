@@ -6,7 +6,7 @@ import torch
 from diart import argdoc
 from diart import models as m
 from diart import utils
-from diart.handler import StreamingInferenceHandler
+from diart.handler import StreamingInferenceHandler, StreamingInferenceConfig
 
 
 def run():
@@ -99,16 +99,21 @@ def run():
     config = pipeline_class.get_config_class()(**vars(args))
     pipeline = pipeline_class(config)
 
-    handler = StreamingInferenceHandler(
+    # Create inference configuration
+    inference_config = StreamingInferenceConfig(
         pipeline=pipeline,
-        sample_rate=config.sample_rate,
-        host=args.host,
-        port=args.port,
         batch_size=1,
         do_profile=False,
         do_plot=False,
         show_progress=False,
-        output=args.output,
+    )
+
+    # Initialize handler with new configuration
+    handler = StreamingInferenceHandler(
+        inference_config=inference_config,
+        sample_rate=config.sample_rate,
+        host=args.host,
+        port=args.port,
     )
 
     handler.run()
