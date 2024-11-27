@@ -129,6 +129,10 @@ class StreamingInferenceHandler:
         ClientState
             Initialized client state object
         """
+        # Create a new pipeline instance with the same config
+        # This ensures each client has its own state while sharing model weights
+        pipeline = self.inference_config.pipeline.__class__(self.inference_config.pipeline.config)
+        
         audio_config = WebSocketAudioSourceConfig(
             uri=f"{self.uri}:{client_id}",
             sample_rate=self.sample_rate
@@ -140,7 +144,7 @@ class StreamingInferenceHandler:
         )
 
         inference = StreamingInference(
-            pipeline=self.inference_config.pipeline,
+            pipeline=pipeline,
             source=audio_source,
             batch_size=self.inference_config.batch_size,
             do_profile=self.inference_config.do_profile,
