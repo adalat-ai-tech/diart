@@ -181,6 +181,9 @@ class StreamingInferenceHandler:
                 # Start inference
                 client_state.inference()
                 logger.info(f"Started inference for client: {client_id}")
+                
+                # Send ready notification to client
+                self.send(client_id, "READY")
             except Exception as e:
                 logger.error(f"Failed to initialize client {client_id}: {e}")
                 self.close(client_id)
