@@ -267,9 +267,14 @@ class StreamingInferenceHandler:
         """
         if client_id in self._clients:
             try:
-                self._clients[client_id].audio_source.close()
+                # Clean up pipeline state using built-in reset method
+                client_state = self._clients[client_id]
+                client_state.inference.pipeline.reset()
+                
+                # Close audio source and remove client
+                client_state.audio_source.close()
                 del self._clients[client_id]
-                logger.info(f"Closed connection for client: {client_id}")
+                logger.info(f"Closed connection and cleaned up state for client: {client_id}")
             except Exception as e:
                 logger.error(f"Error closing client {client_id}: {e}")
 
