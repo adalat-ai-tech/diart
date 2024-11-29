@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Union, Text, Optional, AnyStr, Dict, Any, Callable
 import logging
 from websocket_server import WebsocketServer
+import socket
 
 from . import blocks
 from . import sources as src
@@ -223,8 +224,13 @@ class StreamingInferenceHandler:
         if client_id in self._clients:
             try:
                 self._clients[client_id].audio_source.process_message(message)
+            except (socket.error, ConnectionError) as e:
+                logger.warning(f"Client {client_id} disconnected: {e}")
+                self.close(client_id)
             except Exception as e:
                 logger.error(f"Error processing message from client {client_id}: {e}")
+                # Don't close the connection for non-connection related errors
+                # This allows the client to retry sending the message
 
     def send(self, client_id: Text, message: AnyStr) -> None:
         """Send a message to a specific client.
@@ -247,18 +253,34 @@ class StreamingInferenceHandler:
         if client is not None:
             try:
                 self.server.send_message(client, message)
+            except (socket.error, ConnectionError) as e:
+                logger.warning(f"Client {client_id} disconnected while sending message: {e}")
+                self.close(client_id)
             except Exception as e:
                 logger.error(f"Failed to send message to client {client_id}: {e}")
 
     def run(self) -> None:
         """Start the WebSocket server."""
         logger.info(f"Starting WebSocket server on {self.uri}")
-        try:
-            self.server.run_forever()
-        except Exception as e:
-            logger.error(f"Server error: {e}")
-        finally:
-            self.close_all()
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                self.server.run_forever()
+                break  # If server exits normally, break the retry loop
+            except (socket.error, ConnectionError) as e:
+                logger.warning(f"WebSocket connection error: {e}")
+                retry_count += 1
+                if retry_count < max_retries:
+                    logger.info(f"Attempting to restart server (attempt {retry_count + 1}/{max_retries})")
+                else:
+                    logger.error("Max retry attempts reached. Server shutting down.")
+            except Exception as e:
+                logger.error(f"Fatal server error: {e}")
+                break
+            finally:
+                self.close_all()
 
     def close(self, client_id: Text) -> None:
         """Close a specific client's connection and cleanup resources.
@@ -277,9 +299,20 @@ class StreamingInferenceHandler:
                 # Close audio source and remove client
                 client_state.audio_source.close()
                 del self._clients[client_id]
+                
+                # Try to send a close frame to the client
+                try:
+                    client = next((c for c in self.server.clients if c["id"] == client_id), None)
+                    if client:
+                        self.server.send_message(client, "CLOSE")
+                except Exception:
+                    pass  # Ignore errors when trying to send close message
+                
                 logger.info(f"Closed connection and cleaned up state for client: {client_id}")
             except Exception as e:
                 logger.error(f"Error closing client {client_id}: {e}")
+                # Ensure client is removed from dictionary even if cleanup fails
+                self._clients.pop(client_id, None)
 
     def close_all(self) -> None:
         """Shutdown the server and cleanup all client connections."""
