@@ -66,6 +66,16 @@ def run():
     # Run websocket client
     ws = WebSocket()
     ws.connect(f"ws://{args.host}:{args.port}")
+    
+    # Wait for READY signal from server
+    print("Waiting for server to be ready...", end="", flush=True)
+    while True:
+        message = ws.recv()
+        if message.strip() == "READY":
+            print(" OK")
+            break
+        print(f"\nUnexpected message while waiting for READY: {message}")
+    
     sender = Thread(
         target=send_audio, args=[ws, args.source, args.step, args.sample_rate]
     )
