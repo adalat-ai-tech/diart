@@ -6,7 +6,7 @@ import torch
 from diart import argdoc
 from diart import models as m
 from diart import utils
-from diart.handler import StreamingInferenceHandler, StreamingInferenceConfig
+from diart.handler import StreamingInferenceConfig, StreamingInferenceHandler
 
 
 def run():

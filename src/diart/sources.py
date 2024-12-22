@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from queue import SimpleQueue
-from typing import Text, Optional, AnyStr, Dict, Any, Union, Tuple
+from typing import Any, AnyStr, Dict, Optional, Text, Tuple, Union
 
 import numpy as np
 import sounddevice as sd
@@ -12,7 +12,7 @@ from torchaudio.io import StreamReader
 from websocket_server import WebsocketServer
 
 from . import utils
-from .audio import FilePath, AudioLoader
+from .audio import AudioLoader, FilePath
 
 
 class AudioSource(ABC):
