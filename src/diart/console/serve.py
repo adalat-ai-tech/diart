@@ -6,7 +6,7 @@ import torch
 from diart import argdoc
 from diart import models as m
 from diart import utils
-from diart.handler import StreamingInferenceConfig, StreamingInferenceHandler
+from diart.handler import StreamingHandlerConfig, StreamingHandler
 
 
 def run():
@@ -94,24 +94,23 @@ def run():
     args.segmentation = m.SegmentationModel.from_pretrained(args.segmentation, hf_token)
     args.embedding = m.EmbeddingModel.from_pretrained(args.embedding, hf_token)
 
-    # Resolve pipeline
+    # Resolve pipeline configuration
     pipeline_class = utils.get_pipeline_class(args.pipeline)
-    config = pipeline_class.get_config_class()(**vars(args))
-    pipeline = pipeline_class(config)
+    pipeline_config = pipeline_class.get_config_class()(**vars(args))
 
-    # Create inference configuration
-    inference_config = StreamingInferenceConfig(
-        pipeline=pipeline,
+    # Create handler configuration for inference
+    config = StreamingHandlerConfig(
+        pipeline_class=pipeline_class,
+        pipeline_config=pipeline_config,
         batch_size=1,
         do_profile=False,
         do_plot=False,
         show_progress=False,
     )
 
-    # Initialize handler with new configuration
-    handler = StreamingInferenceHandler(
-        inference_config=inference_config,
-        sample_rate=config.sample_rate,
+    # Initialize handler
+    handler = StreamingHandler(
+        config=config,
         host=args.host,
         port=args.port,
     )

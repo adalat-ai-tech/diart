@@ -19,29 +19,15 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class WebSocketAudioSourceConfig:
-    """Configuration for WebSocket audio source.
-
-    Parameters
-    ----------
-    uri : str
-        WebSocket URI for the audio source
-    sample_rate : int
-        Audio sample rate in Hz
-    """
-
-    uri: str
-    sample_rate: int = 16000
-
-
-@dataclass
-class StreamingInferenceConfig:
+class StreamingHandlerConfig:
     """Configuration for streaming inference.
 
     Parameters
     ----------
-    pipeline : blocks.Pipeline
-        Diarization pipeline configuration
+    pipeline_class : type
+        Pipeline class
+    pipeline_config : blocks.PipelineConfig
+        Pipeline configuration
     batch_size : int
         Number of inputs to process at once
     do_profile : bool
@@ -54,7 +40,8 @@ class StreamingInferenceConfig:
         Custom progress bar implementation
     """
 
-    pipeline: blocks.Pipeline
+    pipeline_class: type
+    pipeline_config: blocks.PipelineConfig
     batch_size: int = 1
     do_profile: bool = True
     do_plot: bool = False
@@ -70,7 +57,7 @@ class ClientState:
     inference: StreamingInference
 
 
-class StreamingInferenceHandler:
+class StreamingHandler:
     """Handles real-time speaker diarization inference for multiple audio sources over WebSocket.
 
     This handler manages WebSocket connections from multiple clients, processing
@@ -78,10 +65,8 @@ class StreamingInferenceHandler:
 
     Parameters
     ----------
-    inference_config : StreamingInferenceConfig
+    config : StreamingHandlerConfig
         Streaming inference configuration
-    sample_rate : int, optional
-        Audio sample rate in Hz, by default 16000
     host : str, optional
         WebSocket server host, by default "127.0.0.1"
     port : int, optional
@@ -94,15 +79,13 @@ class StreamingInferenceHandler:
 
     def __init__(
         self,
-        inference_config: StreamingInferenceConfig,
-        sample_rate: int = 16000,
+        config: StreamingHandlerConfig,
         host: Text = "127.0.0.1",
         port: int = 7007,
         key: Optional[Union[Text, Path]] = None,
         certificate: Optional[Union[Text, Path]] = None,
     ):
-        self.inference_config = inference_config
-        self.sample_rate = sample_rate
+        self.config = config
         self.host = host
         self.port = port
 
@@ -135,26 +118,21 @@ class StreamingInferenceHandler:
         """
         # Create a new pipeline instance with the same config
         # This ensures each client has its own state while sharing model weights
-        pipeline = self.inference_config.pipeline.__class__(
-            self.inference_config.pipeline.config
-        )
-
-        audio_config = WebSocketAudioSourceConfig(
-            uri=f"{self.uri}:{client_id}", sample_rate=self.sample_rate
-        )
+        pipeline = self.config.pipeline_class(self.config.pipeline_config)
 
         audio_source = src.WebSocketAudioSource(
-            uri=audio_config.uri, sample_rate=audio_config.sample_rate
+            uri=f"{self.uri}:{client_id}",
+            sample_rate=self.config.pipeline_config.sample_rate,
         )
 
         inference = StreamingInference(
             pipeline=pipeline,
             source=audio_source,
-            batch_size=self.inference_config.batch_size,
-            do_profile=self.inference_config.do_profile,
-            do_plot=self.inference_config.do_plot,
-            show_progress=self.inference_config.show_progress,
-            progress_bar=self.inference_config.progress_bar,
+            batch_size=self.config.batch_size,
+            do_profile=self.config.do_profile,
+            do_plot=self.config.do_plot,
+            show_progress=self.config.show_progress,
+            progress_bar=self.config.progress_bar,
         )
 
         return ClientState(audio_source=audio_source, inference=inference)
@@ -174,16 +152,15 @@ class StreamingInferenceHandler:
 
         if client_id not in self._clients:
             try:
-                client_state = self._create_client_state(client_id)
-                self._clients[client_id] = client_state
+                self._clients[client_id] = self._create_client_state(client_id)
 
                 # Setup RTTM response hook
-                client_state.inference.attach_hooks(
+                self._clients[client_id].inference.attach_hooks(
                     lambda ann_wav: self.send(client_id, ann_wav[0].to_rttm())
                 )
 
                 # Start inference
-                client_state.inference()
+                self._clients[client_id].inference()
                 logger.info(f"Started inference for client: {client_id}")
 
                 # Send ready notification to client
