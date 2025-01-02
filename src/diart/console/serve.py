@@ -6,7 +6,7 @@ import torch
 from diart import argdoc
 from diart import models as m
 from diart import utils
-from diart.handler import StreamingHandlerConfig, StreamingHandler
+from diart.websockets import WebSocketStreamingServer
 
 
 def run():
@@ -98,24 +98,15 @@ def run():
     pipeline_class = utils.get_pipeline_class(args.pipeline)
     pipeline_config = pipeline_class.get_config_class()(**vars(args))
 
-    # Create handler configuration for inference
-    config = StreamingHandlerConfig(
+    # Initialize Websocket server
+    server = WebSocketStreamingServer(
         pipeline_class=pipeline_class,
         pipeline_config=pipeline_config,
-        batch_size=1,
-        do_profile=False,
-        do_plot=False,
-        show_progress=False,
-    )
-
-    # Initialize handler
-    handler = StreamingHandler(
-        config=config,
         host=args.host,
         port=args.port,
     )
 
-    handler.run()
+    server.run()
 
 
 if __name__ == "__main__":

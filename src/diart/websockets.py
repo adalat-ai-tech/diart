@@ -9,44 +9,12 @@ from websocket_server import WebsocketServer
 from . import blocks
 from . import sources as src
 from .inference import StreamingInference
-from .progress import ProgressBar, RichProgressBar
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class StreamingHandlerConfig:
-    """Configuration for streaming inference.
-
-    Parameters
-    ----------
-    pipeline_class : type
-        Pipeline class
-    pipeline_config : blocks.PipelineConfig
-        Pipeline configuration
-    batch_size : int
-        Number of inputs to process at once
-    do_profile : bool
-        Enable processing time profiling
-    do_plot : bool
-        Enable real-time prediction plotting
-    show_progress : bool
-        Display progress bar
-    progress_bar : Optional[ProgressBar]
-        Custom progress bar implementation
-    """
-
-    pipeline_class: type
-    pipeline_config: blocks.PipelineConfig
-    batch_size: int = 1
-    do_profile: bool = True
-    do_plot: bool = False
-    show_progress: bool = True
-    progress_bar: Optional[ProgressBar] = None
 
 
 @dataclass
@@ -57,7 +25,7 @@ class ClientState:
     inference: StreamingInference
 
 
-class StreamingHandler:
+class WebSocketStreamingServer:
     """Handles real-time speaker diarization inference for multiple audio sources over WebSocket.
 
     This handler manages WebSocket connections from multiple clients, processing
@@ -65,8 +33,10 @@ class StreamingHandler:
 
     Parameters
     ----------
-    config : StreamingHandlerConfig
-        Streaming inference configuration
+    pipeline_class : type
+        Pipeline class
+    pipeline_config : blocks.PipelineConfig
+        Pipeline configuration
     host : str, optional
         WebSocket server host, by default "127.0.0.1"
     port : int, optional
@@ -79,17 +49,20 @@ class StreamingHandler:
 
     def __init__(
         self,
-        config: StreamingHandlerConfig,
+        pipeline_class: type,
+        pipeline_config: blocks.PipelineConfig,
         host: Text = "127.0.0.1",
         port: int = 7007,
         key: Optional[Union[Text, Path]] = None,
         certificate: Optional[Union[Text, Path]] = None,
     ):
-        self.config = config
-        self.host = host
-        self.port = port
+        # Pipeline configuration
+        self.pipeline_class = pipeline_class
+        self.pipeline_config = pipeline_config
 
         # Server configuration
+        self.host = host
+        self.port = port
         self.uri = f"{host}:{port}"
         self._clients: Dict[Text, ClientState] = {}
 
@@ -118,21 +91,22 @@ class StreamingHandler:
         """
         # Create a new pipeline instance with the same config
         # This ensures each client has its own state while sharing model weights
-        pipeline = self.config.pipeline_class(self.config.pipeline_config)
+        pipeline = self.pipeline_class(self.pipeline_config)
 
         audio_source = src.WebSocketAudioSource(
             uri=f"{self.uri}:{client_id}",
-            sample_rate=self.config.pipeline_config.sample_rate,
+            sample_rate=self.pipeline_config.sample_rate,
         )
 
         inference = StreamingInference(
             pipeline=pipeline,
             source=audio_source,
-            batch_size=self.config.batch_size,
-            do_profile=self.config.do_profile,
-            do_plot=self.config.do_plot,
-            show_progress=self.config.show_progress,
-            progress_bar=self.config.progress_bar,
+            # The following variables are fixed for a client
+            batch_size=1,
+            do_profile=False, # for minimal latency
+            do_plot=False,
+            show_progress=False,
+            progress_bar=None,
         )
 
         return ClientState(audio_source=audio_source, inference=inference)
