@@ -31,8 +31,9 @@ RUN python --version && \
     pip --version && \
     conda --version
 
-RUN git clone --branch develop-server https://github.com/adalat-ai-tech/diart.git
+# Create app directory and copy files
 WORKDIR /diart
+COPY . .
 
 # Install diart dependencies
 RUN conda install portaudio pysoundfile ffmpeg -c conda-forge
