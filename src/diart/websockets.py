@@ -7,9 +7,9 @@ from typing import Any, AnyStr, Callable, Dict, Optional, Text, Union
 import numpy as np
 from websocket_server import WebsocketServer
 
-from . import utils
 from . import blocks
 from . import sources as src
+from . import utils
 from .inference import StreamingInference
 
 # Configure logging
@@ -31,9 +31,7 @@ class ProxyAudioSource(src.AudioSource):
     """
 
     def __init__(
-        self,
-        uri: str,
-        sample_rate: int,
+        self, uri: str, sample_rate: int,
     ):
         # FIXME sample_rate is not being used, this can be confusing and lead to incompatibilities.
         #  I would prefer the client to send a JSON with data and sample rate, then resample if needed
@@ -314,7 +312,9 @@ class WebSocketStreamingServer:
                 logger.warning(f"WebSocket server connection error: {e}")
                 retry_count += 1
                 if retry_count < max_retries:
-                    logger.info(f"Attempting to restart server (attempt {retry_count + 1}/{max_retries})")
+                    logger.info(
+                        f"Attempting to restart server (attempt {retry_count + 1}/{max_retries})"
+                    )
                 else:
                     logger.error("Max retry attempts reached. Server shutting down.")
             except Exception as e:
