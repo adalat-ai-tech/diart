@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 import torch
+
 from diart import argdoc
 from diart import models as m
 from diart import utils
