@@ -94,8 +94,7 @@ class WebSocketStreamingServer:
         pipeline = self.pipeline_class(self.pipeline_config)
 
         audio_source = src.WebSocketAudioSource(
-            uri=f"{self.uri}:{client_id}",
-            sample_rate=self.pipeline_config.sample_rate,
+            uri=f"{self.uri}:{client_id}", sample_rate=self.pipeline_config.sample_rate,
         )
 
         inference = StreamingInference(
@@ -103,7 +102,7 @@ class WebSocketStreamingServer:
             source=audio_source,
             # The following variables are fixed for a client
             batch_size=1,
-            do_profile=False, # for minimal latency
+            do_profile=False,  # for minimal latency
             do_plot=False,
             show_progress=False,
             progress_bar=None,
@@ -143,6 +142,11 @@ class WebSocketStreamingServer:
             self.send(client_id, "READY")
         except Exception as e:
             logger.error(f"Failed to initialize client {client_id}: {e}")
+
+            # Send close notification to client
+            self.send(client_id, "CLOSE")
+
+            # Close audio source and remove client
             self.close(client_id)
 
     def _on_disconnect(self, client: Dict[Text, Any], server: WebsocketServer) -> None:
@@ -157,6 +161,11 @@ class WebSocketStreamingServer:
         """
         client_id = client["id"]
         logger.info(f"Client disconnected: {client_id}")
+
+        # Send close notification to client
+        self.send(client_id, "CLOSE")
+
+        # Close audio source and remove client
         self.close(client_id)
 
     def _on_message_received(
@@ -182,7 +191,13 @@ class WebSocketStreamingServer:
             self._clients[client_id].audio_source.process_message(message)
         except (socket.error, ConnectionError) as e:
             logger.warning(f"Client {client_id} disconnected: {e}")
+
+            # Send close notification to client
+            self.send(client_id, "CLOSE")
+
+            # Close audio source and remove client
             self.close(client_id)
+
         except Exception as e:
             logger.error(f"Error processing message from client {client_id}: {e}")
             # Don't close the connection for non-connection related errors
@@ -202,19 +217,59 @@ class WebSocketStreamingServer:
             return
 
         client = next((c for c in self.server.clients if c["id"] == client_id), None)
-
         if client is None:
             return
 
         try:
             self.server.send_message(client, message)
-        except (socket.error, ConnectionError) as e:
-            logger.warning(
-                f"Client {client_id} disconnected while sending message: {e}"
-            )
-            self.close(client_id)
         except Exception as e:
             logger.error(f"Failed to send message to client {client_id}: {e}")
+
+    def close(self, client_id: Text) -> None:
+        """Close a specific client's connection and cleanup resources.
+
+        Parameters
+        ----------
+        client_id : Text
+            Client identifier to close
+        """
+        if client_id not in self._clients:
+            return
+
+        try:
+            # Clean up pipeline state using built-in reset method
+            client_state = self._clients[client_id]
+            client_state.inference.pipeline.reset()
+
+            # Close audio source and remove client
+            client_state.audio_source.close()
+            del self._clients[client_id]
+
+            logger.info(
+                f"Closed connection and cleaned up state for client: {client_id}"
+            )
+        except Exception as e:
+            logger.error(f"Error closing client {client_id}: {e}")
+            # Ensure client is removed from dictionary even if cleanup fails
+            self._clients.pop(client_id, None)
+
+    def close_all(self) -> None:
+        """Shutdown the server and cleanup all client connections."""
+        logger.info("Shutting down server...")
+        try:
+            for client_id in self._clients.keys():
+                # Close audio source and remove client
+                self.close(client_id)
+
+                # Send close notification to client
+                self.send(client_id, "CLOSE")
+
+            if self.server is not None:
+                self.server.shutdown_gracefully()
+
+            logger.info("Server shutdown complete")
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
 
     def run(self) -> None:
         """Start the WebSocket server."""
@@ -240,59 +295,3 @@ class WebSocketStreamingServer:
                 break
             finally:
                 self.close_all()
-
-    def close(self, client_id: Text) -> None:
-        """Close a specific client's connection and cleanup resources.
-
-        Parameters
-        ----------
-        client_id : Text
-            Client identifier to close
-        """
-        if client_id not in self._clients:
-            return
-
-        try:
-            # Clean up pipeline state using built-in reset method
-            client_state = self._clients[client_id]
-            client_state.inference.pipeline.reset()
-
-            # Close audio source and remove client
-            client_state.audio_source.close()
-            del self._clients[client_id]
-
-            # Try to send a close frame to the client
-            client = next((c for c in self.server.clients if c["id"] == client_id), None)
-
-            if client is None:
-                return
-
-            try:
-                self.server.send_message(client, "CLOSE")
-            except (socket.error, ConnectionError) as e:
-                logger.warning(
-                    f"Client {client_id} disconnected while sending message: {e}"
-                )
-                self.close(client_id)
-            except Exception as e:
-                logger.error(f"Failed to send message to client {client_id}: {e}")
-
-            logger.info(
-                f"Closed connection and cleaned up state for client: {client_id}"
-            )
-        except Exception as e:
-            logger.error(f"Error closing client {client_id}: {e}")
-            # Ensure client is removed from dictionary even if cleanup fails
-            self._clients.pop(client_id, None)
-
-    def close_all(self) -> None:
-        """Shutdown the server and cleanup all client connections."""
-        logger.info("Shutting down server...")
-        try:
-            for client_id in self._clients.keys():
-                self.close(client_id)
-            if self.server is not None:
-                self.server.shutdown_gracefully()
-            logger.info("Server shutdown complete")
-        except Exception as e:
-            logger.error(f"Error during shutdown: {e}")
