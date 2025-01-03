@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AnyStr, Callable, Dict, Optional, Text, Union
+import time
 
 import numpy as np
 from websocket_server import WebsocketServer
@@ -331,10 +332,15 @@ class WebSocketStreamingServer:
             logger.error(f"Error during shutdown: {e}")
 
     def run(self) -> None:
-        """Start the WebSocket server."""
+        """Start the WebSocket server.
+
+        The server will attempt to restart on connection errors with exponential backoff.
+        After max retries are exhausted, it will shut down gracefully.
+        """
         logger.info(f"Starting WebSocket server on {self.uri}")
         max_retries = 3
         retry_count = 0
+        base_delay = 1  # in seconds
 
         while retry_count < max_retries:
             try:
@@ -344,11 +350,17 @@ class WebSocketStreamingServer:
                 logger.warning(f"WebSocket server connection error: {e}")
                 retry_count += 1
                 if retry_count < max_retries:
+                    delay = base_delay * (2 ** (retry_count - 1))  # Exponential backoff
                     logger.info(
-                        f"Attempting to restart server (attempt {retry_count + 1}/{max_retries})"
+                        f"Retrying in {delay} seconds... "
+                        f"(attempt {retry_count}/{max_retries})"
                     )
+                    time.sleep(delay)
                 else:
-                    logger.error("Max retry attempts reached. Server shutting down.")
+                    logger.error(
+                        f"WebSocket server failed to start after {max_retries} attempts. "
+                        f"Last error: {e}"
+                    )
             except Exception as e:
                 logger.error(f"Fatal server error: {e}")
                 break
