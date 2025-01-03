@@ -71,9 +71,6 @@ def run():
         help=f"{argdoc.CPU}. Defaults to GPU if available, CPU otherwise",
     )
     parser.add_argument(
-        "--output", type=Path, help=f"{argdoc.OUTPUT}. Defaults to no writing"
-    )
-    parser.add_argument(
         "--hf-token",
         default="true",
         type=str,
