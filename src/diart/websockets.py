@@ -1,8 +1,8 @@
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AnyStr, Callable, Dict, Optional, Text, Union
-import time
 
 import numpy as np
 from websocket_server import WebsocketServer
@@ -268,7 +268,9 @@ class WebSocketStreamingServer:
 
         client = next((c for c in self.server.clients if c["id"] == client_id), None)
         if client is None:
-            logger.warning(f"Failed to send message to client {client_id}: client not found")
+            logger.warning(
+                f"Failed to send message to client {client_id}: client not found"
+            )
             return
 
         try:
