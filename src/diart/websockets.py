@@ -1,5 +1,4 @@
 import logging
-import socket
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AnyStr, Callable, Dict, Optional, Text, Union
@@ -174,7 +173,7 @@ class WebSocketStreamingServer:
 
             # Send ready notification to client
             self.send(client_id, "READY")
-        except (socket.error, ConnectionError) as e:
+        except OSError as e:
             logger.warning(f"Client {client_id} connection failed: {e}")
             # Just cleanup since client is already disconnected
             self.close(client_id)
@@ -223,7 +222,7 @@ class WebSocketStreamingServer:
             # decode message to audio
             decoded_audio = utils.decode_audio(message)
             self._clients[client_id].audio_source.process_message(decoded_audio)
-        except (socket.error, ConnectionError) as e:
+        except OSError as e:
             logger.warning(f"Client {client_id} disconnected: {e}")
             # Just cleanup since client is already disconnected
             self.close(client_id)
@@ -308,7 +307,7 @@ class WebSocketStreamingServer:
             try:
                 self.server.run_forever()
                 break  # If server exits normally, break the retry loop
-            except (socket.error, ConnectionError) as e:
+            except OSError as e:
                 logger.warning(f"WebSocket server connection error: {e}")
                 retry_count += 1
                 if retry_count < max_retries:
