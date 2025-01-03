@@ -4,8 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AnyStr, Callable, Dict, Optional, Text, Union
 
+import numpy as np
 from websocket_server import WebsocketServer
 
+from . import utils
 from . import blocks
 from . import sources as src
 from .inference import StreamingInference
@@ -17,11 +19,45 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class ProxyAudioSource(src.AudioSource):
+    """A proxy audio source that forwards decoded audio chunks to a processing pipeline.
+
+    Parameters
+    ----------
+    uri : str
+        Unique identifier for this audio source
+    sample_rate : int
+        Expected sample rate of the audio chunks
+    """
+
+    def __init__(
+        self,
+        uri: str,
+        sample_rate: int,
+    ):
+        # FIXME sample_rate is not being used, this can be confusing and lead to incompatibilities.
+        #  I would prefer the client to send a JSON with data and sample rate, then resample if needed
+        super().__init__(uri, sample_rate)
+
+    def process_message(self, message: np.ndarray):
+        """Process an incoming audio message."""
+        # Send audio to pipeline
+        self.stream.on_next(message)
+
+    def read(self):
+        """Starts running the websocket server and listening for audio chunks"""
+        pass
+
+    def close(self):
+        """Complete the audio stream for this client."""
+        self.stream.on_completed()
+
+
 @dataclass
 class ClientState:
     """Represents the state of a connected client."""
 
-    audio_source: src.WebSocketAudioSource
+    audio_source: ProxyAudioSource
     inference: StreamingInference
 
 
@@ -93,7 +129,7 @@ class WebSocketStreamingServer:
         # This ensures each client has its own state while sharing model weights
         pipeline = self.pipeline_class(self.pipeline_config)
 
-        audio_source = src.WebSocketAudioSource(
+        audio_source = ProxyAudioSource(
             uri=f"{self.uri}:{client_id}", sample_rate=self.pipeline_config.sample_rate,
         )
 
@@ -186,7 +222,9 @@ class WebSocketStreamingServer:
             return
 
         try:
-            self._clients[client_id].audio_source.process_message(message)
+            # decode message to audio
+            decoded_audio = utils.decode_audio(message)
+            self._clients[client_id].audio_source.process_message(decoded_audio)
         except (socket.error, ConnectionError) as e:
             logger.warning(f"Client {client_id} disconnected: {e}")
             # Just cleanup since client is already disconnected

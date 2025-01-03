@@ -201,38 +201,6 @@ class MicrophoneAudioSource(AudioSource):
         self._mic_stream.close()
 
 
-class WebSocketAudioSource(AudioSource):
-    """Represents a source of audio coming from the network using the WebSocket protocol.
-
-    Parameters
-    ----------
-    sample_rate: int
-        Sample rate of the chunks emitted.
-    """
-
-    def __init__(
-        self,
-        uri: str,
-        sample_rate: int,
-    ):
-        # FIXME sample_rate is not being used, this can be confusing and lead to incompatibilities.
-        #  I would prefer the client to send a JSON with data and sample rate, then resample if needed
-        super().__init__(uri, sample_rate)
-
-    def process_message(self, message: AnyStr):
-        """Decode and process an incoming audio message."""
-        # Send decoded audio to pipeline
-        self.stream.on_next(utils.decode_audio(message))
-
-    def read(self):
-        """Starts running the websocket server and listening for audio chunks"""
-        pass
-
-    def close(self):
-        """Complete the audio stream for this client."""
-        self.stream.on_completed()
-
-
 class TorchStreamAudioSource(AudioSource):
     def __init__(
         self,
