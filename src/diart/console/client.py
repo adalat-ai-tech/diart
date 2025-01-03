@@ -64,8 +64,12 @@ def run():
         type=str,
         help="Path to an audio file | 'microphone' | 'microphone:<DEVICE_ID>'",
     )
-    parser.add_argument("--host", required=True, type=str, help="Server host")
-    parser.add_argument("--port", required=True, type=int, help="Server port")
+    parser.add_argument(
+        "--host", default="0.0.0.0", type=str, help="Server host. Defaults to 0.0.0.0"
+    )
+    parser.add_argument(
+        "--port", default=7007, type=int, help="Server port. Defaults to 7007"
+    )
     parser.add_argument(
         "--step", default=0.5, type=float, help=f"{argdoc.STEP}. Defaults to 0.5"
     )
@@ -93,7 +97,7 @@ def run():
 
         # Wait for READY signal from server
         print("Waiting for server to be ready...", end="", flush=True)
-        while True:
+        while not stop_event.is_set():
             try:
                 message = ws.recv()
                 if message.strip() == "READY":
@@ -101,9 +105,10 @@ def run():
                     break
                 print(f"\nUnexpected message while waiting for READY: {message}")
             except WebSocketException as e:
-                print(f"\nError while waiting for server: {e}")
+                print(f"\nWebSocket error while waiting for server: {e}")
                 return
 
+        # Start threads for sending and receiving audio
         sender = Thread(
             target=send_audio,
             args=[ws, args.source, args.step, args.sample_rate, stop_event],
@@ -113,14 +118,25 @@ def run():
         sender.start()
         receiver.start()
 
+        try:
+            # Wait for threads to complete or for keyboard interrupt
+            sender.join()
+            receiver.join()
+        except KeyboardInterrupt:
+            print("\nShutting down...")
+            stop_event.set()
+
     except Exception as e:
         print(f"Error: {e}")
-        stop_event.set()
+
     finally:
+        stop_event.set()
         try:
             ws.close()
-        except:
-            pass
+        except WebSocketException:
+            print("Error closing WebSocket")
+        except Exception as e:
+            print(f"Unexpected error closing WebSocket: {e}")
 
 
 if __name__ == "__main__":
