@@ -140,32 +140,30 @@ class WebSocketStreamingServer:
 
             # Send ready notification to client
             self.send(client_id, "READY")
+        except (socket.error, ConnectionError) as e:
+            logger.warning(f"Client {client_id} connection failed: {e}")
+            # Just cleanup since client is already disconnected
+            self.close(client_id)
         except Exception as e:
             logger.error(f"Failed to initialize client {client_id}: {e}")
-
+            # Close audio source and remove client
+            self.close(client_id)
             # Send close notification to client
             self.send(client_id, "CLOSE")
 
-            # Close audio source and remove client
-            self.close(client_id)
-
     def _on_disconnect(self, client: Dict[Text, Any], server: WebsocketServer) -> None:
-        """Handle client disconnection.
+        """Cleanup client state when a connection is closed.
 
         Parameters
         ----------
         client : Dict[Text, Any]
-            Client information dictionary
+            Client metadata
         server : WebsocketServer
-            WebSocket server instance
+            Server instance
         """
         client_id = client["id"]
         logger.info(f"Client disconnected: {client_id}")
-
-        # Send close notification to client
-        self.send(client_id, "CLOSE")
-
-        # Close audio source and remove client
+        # Just cleanup resources, no need to send CLOSE as client is already disconnected
         self.close(client_id)
 
     def _on_message_received(
@@ -191,17 +189,12 @@ class WebSocketStreamingServer:
             self._clients[client_id].audio_source.process_message(message)
         except (socket.error, ConnectionError) as e:
             logger.warning(f"Client {client_id} disconnected: {e}")
-
-            # Send close notification to client
-            self.send(client_id, "CLOSE")
-
-            # Close audio source and remove client
+            # Just cleanup since client is already disconnected
             self.close(client_id)
-
         except Exception as e:
-            logger.error(f"Error processing message from client {client_id}: {e}")
             # Don't close the connection for non-connection related errors
             # This allows the client to retry sending the message
+            logger.error(f"Error processing message from client {client_id}: {e}")
 
     def send(self, client_id: Text, message: AnyStr) -> None:
         """Send a message to a specific client.
@@ -224,9 +217,10 @@ class WebSocketStreamingServer:
             self.server.send_message(client, message)
         except Exception as e:
             logger.error(f"Failed to send message to client {client_id}: {e}")
+            raise
 
     def close(self, client_id: Text) -> None:
-        """Close a specific client's connection and cleanup resources.
+        """Close and cleanup resources for a specific client.
 
         Parameters
         ----------
@@ -245,12 +239,10 @@ class WebSocketStreamingServer:
             client_state.audio_source.close()
             del self._clients[client_id]
 
-            logger.info(
-                f"Closed connection and cleaned up state for client: {client_id}"
-            )
+            logger.info(f"Cleaned up resources for client: {client_id}")
         except Exception as e:
-            logger.error(f"Error closing client {client_id}: {e}")
-            # Ensure client is removed from dictionary even if cleanup fails
+            logger.error(f"Error cleaning up resources for client {client_id}: {e}")
+            # Ensure client is removed even if cleanup fails
             self._clients.pop(client_id, None)
 
     def close_all(self) -> None:
@@ -260,7 +252,6 @@ class WebSocketStreamingServer:
             for client_id in self._clients.keys():
                 # Close audio source and remove client
                 self.close(client_id)
-
                 # Send close notification to client
                 self.send(client_id, "CLOSE")
 
@@ -282,12 +273,10 @@ class WebSocketStreamingServer:
                 self.server.run_forever()
                 break  # If server exits normally, break the retry loop
             except (socket.error, ConnectionError) as e:
-                logger.warning(f"WebSocket connection error: {e}")
+                logger.warning(f"WebSocket server connection error: {e}")
                 retry_count += 1
                 if retry_count < max_retries:
-                    logger.info(
-                        f"Attempting to restart server (attempt {retry_count + 1}/{max_retries})"
-                    )
+                    logger.info(f"Attempting to restart server (attempt {retry_count + 1}/{max_retries})")
                 else:
                     logger.error("Max retry attempts reached. Server shutting down.")
             except Exception as e:
