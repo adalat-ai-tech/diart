@@ -212,10 +212,21 @@ class WebSocketStreamingServer:
             WebSocket server instance
         message : AnyStr
             Received message data
+
+        Raises
+        ------
+        Warning
+            If client not found in self._clients. Common cases:
+            - Message received before client initialization complete
+            - Message received after client cleanup started
+            - Race condition in client connection/disconnection
+        Error
+            If message processing fails. Error will be logged.
         """
         client_id = client["id"]
 
         if client_id not in self._clients:
+            logger.warning(f"Received message from unregistered client {client_id}")
             return
 
         try:
@@ -240,12 +251,23 @@ class WebSocketStreamingServer:
             Target client identifier
         message : AnyStr
             Message to send
+
+        Raises
+        ------
+        Warning
+            If client is not found in server.clients. Common cases:
+            - Client disconnected but cleanup is not complete
+            - Network issues caused client to drop
+            - Race condition between disconnect and message send
+        Error
+            If message sending fails. Error will be logged and re-raised.
         """
         if not message:
             return
 
         client = next((c for c in self.server.clients if c["id"] == client_id), None)
         if client is None:
+            logger.warning(f"Failed to send message to client {client_id}: client not found")
             return
 
         try:
@@ -261,8 +283,19 @@ class WebSocketStreamingServer:
         ----------
         client_id : Text
             Client identifier to close
+
+        Raises
+        ------
+        Warning
+            If client not found in self._clients. Common cases:
+            - Already cleaned up by another error handler
+            - Multiple error handlers trying to cleanup same client
+            - Cleanup triggered for client that never fully connected
+        Error
+            If cleanup fails. Error will be logged and client will be force-removed.
         """
         if client_id not in self._clients:
+            logger.warning(f"Attempted to close non-existent client {client_id}")
             return
 
         try:
